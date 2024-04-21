@@ -1,14 +1,15 @@
-import numpy as np
 import igraph as ig
+import numpy as np
 import random
 
-def flip_coin():
+def _flip_coin():
     return random.uniform(0, 1) > .5
+
 
 class Partition:
     def __init__(self, G_ig, sample_fraction=.5, init_partition=None):
         np.random.seed()
-        self.G_ig = G_is
+        self.G_ig = G_ig
         self.n_nodes = self.G_ig.vcount()
         self.n_edges = self.G_ig.ecount()
         self.sample_size_nodes = int(self.n_nodes * sample_fraction)
@@ -17,13 +18,13 @@ class Partition:
         self.n_comms = 0
         self.fitness = None
         if init_partition is None:
-            self.initialize_partition()
+            self.__initialize_partition()
         else:
             self.membership = init_partition
             self.n_comms = len(np.unique(self.membership))
 
-    def initialize_partition(self):
-        if flip_coin():
+    def __initialize_partition(self):
+        if _flip_coin():
             # sample nodes
             subsample = np.random.choice(self.n_nodes, size=self.sample_size_nodes, replace=False)
             subgraph = self.G_ig.subgraph(subsample)
@@ -53,7 +54,7 @@ class Partition:
         self.fitness = partition.modularity
         return self
 
-    def newman_split(self, indices, comm_id_to_split):
+    def __newman_split(self, indices, comm_id_to_split):
         # newman
         subgraph = self.G_ig.subgraph(indices)
         new_assignment = subgraph.community_leading_eigenvector(clusters=2).membership
@@ -61,12 +62,12 @@ class Partition:
         new_assignment[new_assignment == 1] = self.n_comms
         self.membership[self.membership == comm_id_to_split] = new_assignment
 
-    def random_split(self, indices):
+    def __random_split(self, indices):
         size_to_split = min(1, np.random.choice(len(indices)//2))
         idx_to_split = np.random.choice(indices, size=size_to_split, replace=False)
         self.membership[idx_to_split] = self.n_comms
 
-    def random_merge(self):
+    def __random_merge(self):
         # randomly merge two connected communities
         candidate_edges = random.choices(self.G_ig.es, k=10)
         for i, e in enumerate(candidate_edges):
@@ -81,21 +82,21 @@ class Partition:
 
     def mutate(self):
         self.membership = np.array(self.membership)
-        if flip_coin():
+        if _flip_coin():
             # split a community
             comm_id_to_split = np.random.choice(self.n_comms)
             idx_to_split = np.where(self.membership == comm_id_to_split)[0]
             if len(idx_to_split) > 2:
                 min_comm_size_newman = 10
                 if len(idx_to_split) > min_comm_size_newman:
-                    if flip_coin():
-                        self.newman_split(idx_to_split, comm_id_to_split)
+                    if _flip_coin():
+                        self.__newman_split(idx_to_split, comm_id_to_split)
                     else:
-                        self.random_split(idx_to_split)
+                        self.__random_split(idx_to_split)
                 else:
-                    self.random_split(idx_to_split)
+                    self.__random_split(idx_to_split)
                 self.n_comms += 1
         else:
             # randomly merge two connected communities
-            self.random_merge()
+            self.__random_merge()
         return self
