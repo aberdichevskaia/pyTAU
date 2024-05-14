@@ -3,12 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
+requires-python = ">=3.8"
 name="tau-graph-clustering"
-version="0.1.1"
+version="0.1.5"
 dependencies = [
-    "numpy",
-    "python_igraph",
-    "scikit_learn"
+    "numpy>=1.14.0",
+    "igraph>=0.9.8",
+    "scikit_learn>=0.24.0"
 ]
 description="TAU is a genetic algorithm for graph clustering"
 classifiers = [
