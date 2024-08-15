@@ -1,4 +1,5 @@
 *npy
 *__pycache__*
 dist/*
+build/*
 tau_graph_clustering.egg-info/*
