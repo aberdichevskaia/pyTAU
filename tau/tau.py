@@ -1,5 +1,5 @@
 from multiprocessing import Pool
-from sklearn.metrics.cluster import pair_confusion_matrix
+from sklearn.metrics import adjusted_rand_score
 import itertools
 import numpy as np
 import os
@@ -19,13 +19,6 @@ def _get_probabilities(values, selection_power):
     for value in values:
         p.append(value ** selection_power / denom)
     return p
-
-
-def _compute_partition_similarity(partition_a, partition_b):
-    conf = pair_confusion_matrix(partition_a, partition_b)
-    b, d, c, a = conf.flatten()
-    jac = a/(a+c+d)
-    return jac
 
 
 def _overlap(partition_memberships):
@@ -56,10 +49,15 @@ class GeneticOptimizer:
     def __init__(self, G_ig, population_size=60, n_workers=-1, 
                 max_generations=500, selection_power=5, p_elite=0.1,
                 p_immigrants=0.15, stopping_criterion_generations=10,
-                stopping_criterion_jaccard=0.98, elite_similarity_threshold=0.9, 
+                stopping_criterion_similarity=0.98, elite_similarity_threshold=0.9, 
                 logging=False):
         self.G_ig = G_ig
         self.POPULATION_SIZE = max(10, population_size)
+
+        assert n_workers == -1 or n_workers >= 2, (
+            "Number of used workers must be at least 2. "
+            "Pass -1 to use all available workers."
+        )
         cpus = os.cpu_count()
         self.N_WORKERS = min(cpus, self.POPULATION_SIZE) if n_workers == -1 else np.min(
                                                 [cpus, self.POPULATION_SIZE, n_workers])
@@ -68,7 +66,7 @@ class GeneticOptimizer:
         self.MAX_GENERATIONS = max_generations
         self.PROBS = _get_probabilities(np.arange(self.POPULATION_SIZE), selection_power)
         self.stopping_criterion_generations = stopping_criterion_generations
-        self.stopping_criterion_jaccard = stopping_criterion_jaccard
+        self.stopping_criterion_similarity = stopping_criterion_similarity
         self.elite_similarity_threshold = elite_similarity_threshold 
 
         if logging == True:
@@ -104,7 +102,7 @@ class GeneticOptimizer:
     def __selection_helper_compute_similarities(self, combinations):
         assert 0 < len(combinations) <= self.N_WORKERS
         pool = Pool(len(combinations))
-        results = [pool.apply_async(_compute_partition_similarity, (pop[idx1].membership, pop[idx2].membership))
+        results = [pool.apply_async(adjusted_rand_score, (pop[idx1].membership, pop[idx2].membership))
                 for idx1, idx2 in combinations]
         pool.close()
         pool.join()
@@ -146,14 +144,20 @@ class GeneticOptimizer:
                     new_pairs = self.__selection_helper_get_batch_of_pairs(elite_indices=elite_indices, candidate_idx=candidate_idx,
                                                                     batch_size=self.N_WORKERS, computed=computed_for_candidate)
                     similarities_between_solutions.update(self.__selection_helper_compute_similarities(new_pairs))
-                jac = similarities_between_solutions[elite_idx, candidate_idx]
-                if jac > similarity_threshold:
+                    computed_pairs += new_pairs
+                similarity_score = similarities_between_solutions[elite_idx, candidate_idx]
+                if similarity_score > similarity_threshold:
                     elite_flag = False
                     break
             if elite_flag:
                 elite_indices.append(candidate_idx)
             candidate_idx += 1
         return elite_indices
+
+    def __log_generation(self, generation_i, best_score, pop_fit, start_time, cnt_convergence):
+        print(f'Generation {generation_i} Top fitness: {np.round(best_score, 6)}; Average fitness: '
+                f'{np.round(np.mean(pop_fit), 6)}; Time per generation: {np.round(time.time() - start_time, 2)}; '
+                f'convergence: {cnt_convergence}')
 
     def find_partition(self, logging=False):
         global pop
@@ -182,7 +186,7 @@ class GeneticOptimizer:
             # stopping criteria related
             if last_best_memb:
                 sim_to_last_best = _compute_partition_similarity(best_indiv.membership, last_best_memb)
-                if sim_to_last_best > self.stopping_criterion_jaccard:
+                if sim_to_last_best > self.stopping_criterion_similarity:
                     cnt_convergence += 1
                 else:
                     cnt_convergence = 0
@@ -192,6 +196,9 @@ class GeneticOptimizer:
             pop_rank_by_fitness = np.argsort(pop_fit)[::-1]
             pop = [pop[i] for i in pop_rank_by_fitness]
             if generation_i == self.MAX_GENERATIONS:
+                if logging == True:
+                    self.__log_generation(generation_i, best_score, pop_fit, 
+                    start_time, cnt_convergence)
                 break
 
             # elitist selection
@@ -212,9 +219,7 @@ class GeneticOptimizer:
             pool.join()
             offspring = [x.get() for x in results]
             if logging == True:
-                print(f'Generation {generation_i} Top fitness: {np.round(best_score, 6)}; Average fitness: '
-                    f'{np.round(np.mean(pop_fit), 6)}; Time per generation: {np.round(time.time() - start_time, 2)}; '
-                    f'convergence: {cnt_convergence}')
+                self.__log_generation(generation_i, best_score, pop_fit, start_time, cnt_convergence)
             pop = elite + offspring + immigrants
 
         # return best and modularity history
