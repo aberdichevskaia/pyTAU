@@ -75,10 +75,8 @@ class GeneticOptimizer:
     def __create_population(self, size_of_population):
         sample_fraction_per_indiv = np.random.uniform(.2, .9, size=size_of_population)
         params = [sample_fraction for sample_fraction in sample_fraction_per_indiv]
-        pool = Pool(min(size_of_population, self.N_WORKERS))
-        results = [pool.apply_async(_create_partition, (self.G_ig, sample_fraction,)) for sample_fraction in params]
-        pool.close()
-        pool.join()
+        with Pool(min(size_of_population, self.N_WORKERS)) as pool:
+            results = [pool.apply_async(_create_partition, (self.G_ig, sample_fraction,)) for sample_fraction in params]
         population = [x.get() for x in results]
         return population
 
@@ -91,21 +89,17 @@ class GeneticOptimizer:
                 idx_to_cross.append([idx1, idx2])
             else:
                 as_is_offspring.append(pop[idx1])
-        pool = Pool(self.N_WORKERS)
-        results = [pool.apply_async(_single_crossover, (self.G_ig, pop[idx1].membership, pop[idx2].membership)) for idx1, idx2 in idx_to_cross]
-        pool.close()
-        pool.join()
+        with Pool(self.N_WORKERS) as pool:
+            results = [pool.apply_async(_single_crossover, (self.G_ig, pop[idx1].membership, pop[idx2].membership)) for idx1, idx2 in idx_to_cross]
         crossed_offspring = [x.get() for x in results]
         offspring = crossed_offspring + as_is_offspring
         return offspring
 
     def __selection_helper_compute_similarities(self, combinations):
         assert 0 < len(combinations) <= self.N_WORKERS
-        pool = Pool(len(combinations))
-        results = [pool.apply_async(adjusted_rand_score, (pop[idx1].membership, pop[idx2].membership))
+        with Pool(len(combinations)) as pool:
+            results = [pool.apply_async(adjusted_rand_score, (pop[idx1].membership, pop[idx2].membership))
                 for idx1, idx2 in combinations]
-        pool.close()
-        pool.join()
         similarities = [x.get() for x in results]
         similarities_dict = {tuple(sorted((idx1, idx2))): similarities[i] for i, (idx1, idx2) in enumerate(combinations)}
         return similarities_dict
@@ -172,10 +166,8 @@ class GeneticOptimizer:
             start_time = time.time()
 
             # Population optimization
-            pool = Pool(self.N_WORKERS)
-            results = [pool.apply_async(indiv.optimize, ()) for indiv in pop]
-            pool.close()
-            pool.join()
+            with Pool(self.N_WORKERS) as pool:
+                results = [pool.apply_async(indiv.optimize, ()) for indiv in pop]
             pop = [x.get() for x in results]
 
             pop_fit = [indiv.fitness for indiv in pop]
@@ -213,10 +205,8 @@ class GeneticOptimizer:
             immigrants = self.__create_population(size_of_population=self.N_IMMIGRANTS)
 
             # mutation
-            pool = Pool(min(len(offspring), self.N_WORKERS))
-            results = [pool.apply_async(indiv.mutate, ()) for indiv in offspring]
-            pool.close()
-            pool.join()
+            with Pool(min(len(offspring), self.N_WORKERS)) as pool:
+                results = [pool.apply_async(indiv.mutate, ()) for indiv in offspring]
             offspring = [x.get() for x in results]
             if logging == True:
                 self.__log_generation(generation_i, best_score, pop_fit, start_time, cnt_convergence)
