@@ -155,9 +155,12 @@ class GeneticOptimizer:
         """
         sample_fraction_per_indiv = np.random.uniform(.2, .9, size=size_of_population)
         params = [sample_fraction for sample_fraction in sample_fraction_per_indiv]
-        with Pool(min(size_of_population, self.N_WORKERS)) as pool:
-            # Use multiprocessing to create partitions in parallel
-            results = [pool.apply_async(_create_partition, (self.G_ig, sample_fraction,)) for sample_fraction in params]
+
+        # Use multiprocessing to create partitions in parallel
+        pool = Pool(min(size_of_population, self.N_WORKERS))
+        results = [pool.apply_async(_create_partition, (self.G_ig, sample_fraction,)) for sample_fraction in params]
+        pool.close()
+        pool.join()        
         population = [x.get() for x in results]
         return population
 
@@ -181,9 +184,12 @@ class GeneticOptimizer:
             else:
                 # Otherwise, keep one parent unchanged (offspring is a `clone` of a parent)
                 as_is_offspring.append(pop[idx1])
-        with Pool(self.N_WORKERS) as pool:
-            # Perform crossover in parallel using multiprocessing
-            results = [pool.apply_async(_single_crossover, (self.G_ig, pop[idx1].membership, pop[idx2].membership)) for idx1, idx2 in idx_to_cross]
+
+        # Perform crossover in parallel using multiprocessing        
+        pool = Pool(self.N_WORKERS)
+        results = [pool.apply_async(_single_crossover, (self.G_ig, pop[idx1].membership, pop[idx2].membership)) for idx1, idx2 in idx_to_cross]
+        pool.close()
+        pool.join()
         crossed_offspring = [x.get() for x in results]
         offspring = crossed_offspring + as_is_offspring
         return offspring
@@ -199,9 +205,11 @@ class GeneticOptimizer:
         dict: A dictionary with tuples of indices as keys and similarity scores as values.
         """
         assert 0 < len(combinations) <= self.N_WORKERS
-        with Pool(len(combinations)) as pool:
-            results = [pool.apply_async(adjusted_rand_score, (pop[idx1].membership, pop[idx2].membership))
-                for idx1, idx2 in combinations]
+        pool = Pool(len(combinations))
+        results = [pool.apply_async(adjusted_rand_score, (pop[idx1].membership, pop[idx2].membership))
+            for idx1, idx2 in combinations]
+        pool.close()
+        pool.join()
         similarities = [x.get() for x in results]
         similarities_dict = {tuple(sorted((idx1, idx2))): similarities[i] for i, (idx1, idx2) in enumerate(combinations)}
         return similarities_dict
@@ -319,8 +327,10 @@ class GeneticOptimizer:
             start_time = time.time()
 
             # Step 2: Optimize the population
-            with Pool(self.N_WORKERS) as pool:
-                results = [pool.apply_async(indiv.optimize, ()) for indiv in pop]
+            pool = Pool(self.N_WORKERS)
+            results = [pool.apply_async(indiv.optimize, ()) for indiv in pop]
+            pool.close()
+            pool.join()            
             pop = [x.get() for x in results]
 
             pop_fit = [indiv.fitness for indiv in pop]
@@ -336,7 +346,7 @@ class GeneticOptimizer:
             # that the population may have converged to a stable solution.
 
             if last_best_memb:
-                sim_to_last_best = _compute_partition_similarity(best_indiv.membership, last_best_memb)
+                sim_to_last_best = adjusted_rand_score(best_indiv.membership, last_best_memb)
                 if sim_to_last_best > self.stopping_criterion_similarity:
                     cnt_convergence += 1
                 else:
@@ -373,8 +383,10 @@ class GeneticOptimizer:
             # Apply random mutations to the offspring to further enhance genetic diversity.
             # Mutation introduces small random changes to an individual's structure, which
             # can help escape local optima and explore new areas of the solution space.
-            with Pool(min(len(offspring), self.N_WORKERS)) as pool:
-                results = [pool.apply_async(indiv.mutate, ()) for indiv in offspring]
+            pool = Pool(min(len(offspring), self.N_WORKERS))
+            results = [pool.apply_async(indiv.mutate, ()) for indiv in offspring]
+            pool.close()
+            pool.join()
             offspring = [x.get() for x in results]
 
             # 4.3 Immigration:

@@ -1,3 +1,5 @@
+[![PyPI version](https://img.shields.io/pypi/v/tau-graph-clustering.svg?logo=pypi)](https://pypi.org/project/tau-graph-clustering/)
+
 # Tel Aviv University (TAU)
 
 TAU ia a Python package that provides advanced graph clustering using a combination of the `igraph` library, the Leiden algorithm, and a genetic algorithm. It is designed to achieve superior modularity compared to the standard Leiden algorithm.
@@ -35,7 +37,7 @@ from tau import GeneticOptimizer
 
 ### Creating a Clustering Instance
 
-Create an instance of the `GraphClustering` class with the following parameters:
+Create an instance of the `GeneticOptimizer` class with the following parameters:
 
 - **\`G_ig\`**: The `igraph` graph object.
 - **\`population_size\`** (default=60): The number of partitions in the genetic algorithm's population.
@@ -52,7 +54,7 @@ Create an instance of the `GraphClustering` class with the following parameters:
 Example:
 
 ```python
-clustering = GraphClustering(G_ig=my_graph, population_size=100, max_generations=200)
+clustering = GeneticOptimizer(G_ig=my_graph, population_size=100, max_generations=200)
 ```
 
 ### Finding the Optimal Partition
